@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ontwijk de Nucleaire Bommen</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            overflow: hidden; /* Voorkom scrollen */
+        }
+        canvas {
+            border: 1px solid #000;
+            background-color: #fff;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .score {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        #menu {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #6200ea;
+            padding: 20px;
+            border-radius: 10px;
+            color: white;
+        }
+        #gameOver {
+            display: none;
+            font-size: 24px;
+            color: red;
+            margin-top: 20px;
+        }
+        #restartButton {
+            display: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #03dac5;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            margin-top: 10px;
+        }
+        .modeButton {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            background-color: #bb86fc;
+            border: none;
+            border-radius: 5px;
+            color: white;
+        }
+        #pauseButton {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #ffeb3b;
+            border: none;
+            border-radius: 5px;
+            color: black;
+            margin-top: 10px;
+        }
+        #pauseMenu {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            background-color: #6200ea;
+            padding: 20px;
+            border-radius: 10px;
+            color: white;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10; /* Z-index om het pauzescherm boven andere elementen te plaatsen */
+        }
+        #resumeButton {
+            margin: 5px;
+        }
+        #languageSelect {
+            margin: 10px;
+            padding: 5px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="title">Ontwijk de Nucleaire Bommen</h1>
+    <div class="score">Score: <span id="score">0</span></div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="menu">
+        <select id="languageSelect">
+            <option value="nl">Nederlands</option>
+            <option value="en">English</option>
+        </select>
+        <button class="modeButton" id="easyMode">Gemakkelijk</button>
+        <button class="modeButton" id="hardMode">Moeilijk</button>
+    </div>
+    <button id="pauseButton">Pauze</button>
+    <div id="gameOver">Game Over! Je score: <span id="finalScore"></span>.</div>
+    <button id="restartButton">Opnieuw Spelen</button>
+
+    <div id="pauseMenu">
+        <h2>Pauze Menu</h2>
+        <button class="modeButton" id="resumeButton">Vervolg</button>
+        <button class="modeButton" id="changeModeButton">Verander Mode</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+        const menu = document.getElementById('menu');
+        const easyModeButton = document.getElementById('easyMode');
+        const hardModeButton = document.getElementById('hardMode');
+        const pauseButton = document.getElementById('pauseButton');
+        const pauseMenu = document.getElementById('pauseMenu');
+        const resumeButton = document.getElementById('resumeButton');
+        const changeModeButton = document.getElementById('changeModeButton');
+        const languageSelect = document.getElementById('languageSelect');
+
+        let playerX = canvas.width / 2;
+        let playerY = canvas.height / 2;
+        let score = 0;
+        let bombs = [];
+        let gameInterval; // Voor de game loop
+        let bombInterval; // Tijd tussen het verschijnen van bommen
+        let isMoving = true; // Houd bij of de speler beweegt
+        let idleTimer; // Timer voor stilstand
+        let isPaused = false; // Houd bij of het spel gepauzeerd is
+
+        const playerSize = 20; // Grootte van de speler
+        const bombSize = 30; // Grootte van de bommen
+        const movementSpeed = 1; // Snelheid van de speler
+        const easyBombInterval = 2000; // Tijd tussen het verschijnen van bommen in de gemakkelijke modus
+        const hardBombInterval = 1000; // Tijd tussen het verschijnen van bommen in de moeilijke modus
+        const idleLimit = 2000; // Tijd in milliseconden voordat de speler doodgaat als deze niet beweegt
+
+        // Taalconfiguratie
+        const translations = {
+            nl: {
+                title: "Ontwijk de Nucleaire Bommen",
+                easy: "Gemakkelijk",
+                hard: "Moeilijk",
+                pause: "Pauze",
+                gameOver: "Game Over! Je score: ",
+                restart: "Opnieuw Spelen",
+                resume: "Vervolg",
+                changeMode: "Verander Mode",
+                pauseMenu: "Pauze Menu"
+            },
+            en: {
+                title: "Avoid the Nuclear Bombs",
+                easy: "Easy",
+                hard: "Hard",
+                pause: "Pause",
+                gameOver: "Game Over! Your score: ",
+                restart: "Play Again",
+                resume: "Resume",
+                changeMode: "Change Mode",
+                pauseMenu: "Pause Menu"
+            }
+        };
+
+        function updateLanguage() {
+            const selectedLang = languageSelect.value;
+            document.getElementById('title').innerText = translations[selectedLang].title;
+            easyModeButton.innerText = translations[selectedLang].easy;
+            hardModeButton.innerText = translations[selectedLang].hard;
+            pauseButton.innerText = translations[selectedLang].pause;
+            gameOverElement.innerText = translations[selectedLang].gameOver;
+            restartButton.innerText = translations[selectedLang].restart;
+            resumeButton.innerText = translations[selectedLang].resume;
+            changeModeButton.innerText = translations[selectedLang].changeMode;
+            pauseMenu.querySelector('h2').innerText = translations[selectedLang].pauseMenu;
+        }
+
+        function startGame(interval) {
+            bombInterval = interval;
+            score = 0;
+            bombs = [];
+            playerX = canvas.width / 2;
+            playerY = canvas.height / 2;
+            scoreElement.innerText = score;
+            gameOverElement.style.display = 'none';
+            restartButton.style.display = 'none';
+            pauseButton.style.display = 'block'; // Toon de pauze-knop
+            pauseMenu.style.display = 'none'; // Verberg het pauzescherm
+            isMoving = true; // Reset beweging
+            isPaused = false; // Reset pauzestatus
+            gameLoop();
+            spawnBomb(); // Begin met het spawnen van bommen
+            resetIdleTimer(); // Reset de idle timer
+        }
+
+        function spawnBomb() {
+            const bombX = Math.random() * (canvas.width - bombSize);
+            const bombY = Math.random() * (canvas.height - bombSize);
+            bombs.push({ x: bombX, y: bombY });
+            setTimeout(spawnBomb, bombInterval); // Spawn de volgende bom
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = 'blue';
+            ctx.beginPath();
+            ctx.arc(playerX, playerY, playerSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawBombs() {
+            for (const bomb of bombs) {
+                const bombImg = new Image();
+                bombImg.src = 'https://upload.wikimedia.org/wikipedia/commons/3/37/Nuclear_symbol.svg'; // Atomaire bom afbeelding
+                ctx.drawImage(bombImg, bomb.x, bomb.y, bombSize, bombSize);
+            }
+        }
+
+        function checkCollisions() {
+            for (const bomb of bombs) {
+                const distance = Math.sqrt(
+                    (playerX - bomb.x) ** 2 + (playerY - bomb.y) ** 2
+                );
+                if (distance < playerSize + bombSize / 2) {
+                    return true; // Botsing gedetecteerd
+                }
+            }
+            return false; // Geen botsing
+        }
+
+        function endGame() {
+            clearTimeout(idleTimer);
+            gameOverElement.style.display = 'block';
+            finalScoreElement.innerText = score;
+            restartButton.style.display = 'block'; // Toon de opnieuw spelen knop
+            pauseButton.style.display = 'none'; // Verberg de pauze-knop
+        }
+
+        function restartGame() {
+            startGame(bombInterval);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPlayer();
+            drawBombs();
+            score++;
+            scoreElement.innerText = score;
+
+            if (checkCollisions() || !isMoving) {
+                endGame();
+            } else if (!isPaused) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Timer voor stilstand
+        function resetIdleTimer() {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                endGame(); // Speler dood als deze niet beweegt
+            }, idleLimit);
+        }
+
+        // Volg de muisbewegingen
+        canvas.addEventListener('mousemove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            movePlayer(mouseX, mouseY);
+        });
+
+        // Speler bewegen
+        function movePlayer(mouseX, mouseY) {
+            playerX = mouseX;
+            playerY = mouseY;
+            isMoving = true; // Speler beweegt
+            resetIdleTimer(); // Reset idle timer
+        }
+
+        easyModeButton.addEventListener('click', () => startGame(easyBombInterval));
+        hardModeButton.addEventListener('click', () => startGame(hardBombInterval));
+        restartButton.addEventListener('click', restartGame);
+        
+        // Pauze-functionaliteit
+        pauseButton.addEventListener('click', () => {
+            isPaused = !isPaused; // Toggle pauzestatus
+            if (isPaused) {
+                pauseMenu.style.display = 'flex'; // Toon het pauzescherm
+                pauseButton.style.display = 'none'; // Verberg de pauze-knop
+            } else {
+                pauseMenu.style.display = 'none'; // Verberg het pauzescherm
+                pauseButton.style.display = 'block'; // Toon de pauze-knop weer
+                gameLoop(); // Herstart de game loop
+            }
+        });
+
+        resumeButton.addEventListener('click', () => {
+            isPaused = false; // Zet pauzestatus uit
+            pauseMenu.style.display = 'none'; // Verberg het pauzescherm
+            pauseButton.style.display = 'block'; // Toon de pauze-knop weer
+            gameLoop(); // Herstart de game loop
+        });
+
+        changeModeButton.addEventListener('click', () => {
+            pauseMenu.style.display = 'none'; // Verberg het pauzescherm
+            menu.style.display = 'flex'; // Toon het menu
+        });
+
+        // Taalselectie
+        languageSelect.addEventListener('change', updateLanguage);
+    </script>
+</body>
+</html>
